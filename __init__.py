@@ -11,6 +11,7 @@ from microdrop.plugin_helpers import AppDataController, StepOptionsController, \
     get_plugin_info
 from microdrop.gui.protocol_grid_controller import ProtocolGridController
 import serial_device
+from arduino_rpc.board import ArduinoRPCBoard
 
 
 PluginGlobals.push_env('microdrop.managed')
@@ -39,7 +40,7 @@ class TestPlugin(Plugin, AppDataController, StepOptionsController):
             config file, in a section named after this plugin's name attribute
     '''
 
-    serial_ports_ = [port for port in serial_device.SerialDevice().get_serial_ports()]
+    serial_ports_ = [port for port in serial_device.get_serial_ports()]
     if len(serial_ports_):
         default_port_ = serial_ports_[0]
     else:
@@ -72,17 +73,28 @@ class TestPlugin(Plugin, AppDataController, StepOptionsController):
 
     def __init__(self):
         self.name = self.plugins_name
+	self.board = None
 
     def on_plugin_enable(self):
         # We need to call AppDataController's on_plugin_enable() to update the
         # application options data.
         AppDataController.on_plugin_enable(self)
         self.on_app_init()
+        app_values = self.get_app_values()
+	try:
+		self.board = ArduinoRPCBoard(app_values['serial_port'])
+		self.board.pin_mode(pin=13, mode=1)
+		logger.info('Connected to ArduinoRPCBoard on port %s',
+			    app_values['serial_port'])
+	except:
+		logger.error('Could not connect to ArduinoRPCBoard on port %s',
+			     app_values['serial_port'])
         if get_app().protocol:
             pgc = get_service_instance(ProtocolGridController, env='microdrop')
             pgc.update_grid()
 
     def on_plugin_disable(self):
+	self.board = None
         if get_app().protocol:
             pgc = get_service_instance(ProtocolGridController, env='microdrop')
             pgc.update_grid()
@@ -92,8 +104,12 @@ class TestPlugin(Plugin, AppDataController, StepOptionsController):
 
     def on_step_options_changed(self, plugin, step_number):
         app = get_app()
-        if plugin == 'wheelerlab.test_plugin':
-            logger.info('[TestPlugin] on_step_options_changed():'\
-                        '%s step #%d' % (plugin, step_number))
+        if ((plugin == 'wheelerlab.test_plugin') and
+            (app.running or app.realtime_mode)):
+            options = self.get_step_options()
+            logger.info('[TestPlugin] on_step_options_changed():'
+                        '%s step #%d -> %s' % (plugin, step_number, options))
+            self.board.digital_write(pin=13, value=options['led_on'])
+
 
 PluginGlobals.pop_env()
