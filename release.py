@@ -4,6 +4,8 @@ import subprocess
 import re
 
 from microdrop_utility import Version
+from path_helpers import path
+
 
 package_name = 'test_plugin'
 plugin_name = 'wheelerlab.test_plugin'
@@ -19,5 +21,9 @@ with open('properties.yml', 'w') as f:
 
 # create the tar.gz plugin archive
 with tarfile.open("%s-%s.tar.gz" % (package_name, version), "w:gz") as tar:
-    for name in ['__init__.py', 'properties.yml']:
+    for name in ['__init__.py', 'properties.yml', 'hooks',
+                 'on_plugin_install.py']:
         tar.add(name)
+    requirements_file = path(__file__).parent.joinpath('requirements.txt')
+    if requirements_file.exists():
+        tar.add(requirements_file)

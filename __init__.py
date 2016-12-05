@@ -11,7 +11,7 @@ from microdrop.plugin_helpers import AppDataController, StepOptionsController, \
     get_plugin_info
 from microdrop.gui.protocol_grid_controller import ProtocolGridController
 import serial_device
-from arduino_rpc.board import ArduinoRPCBoard
+from base_node_rpc import SerialProxy
 
 
 PluginGlobals.push_env('microdrop.managed')
@@ -73,7 +73,7 @@ class TestPlugin(Plugin, AppDataController, StepOptionsController):
 
     def __init__(self):
         self.name = self.plugins_name
-	self.board = None
+        self.proxy = None
 
     def on_plugin_enable(self):
         # We need to call AppDataController's on_plugin_enable() to update the
@@ -81,20 +81,21 @@ class TestPlugin(Plugin, AppDataController, StepOptionsController):
         AppDataController.on_plugin_enable(self)
         self.on_app_init()
         app_values = self.get_app_values()
-	try:
-		self.board = ArduinoRPCBoard(app_values['serial_port'])
-		self.board.pin_mode(pin=13, mode=1)
-		logger.info('Connected to ArduinoRPCBoard on port %s',
-			    app_values['serial_port'])
-	except:
-		logger.error('Could not connect to ArduinoRPCBoard on port %s',
-			     app_values['serial_port'])
+        try:
+		    self.proxy = SerialProxy(port=app_values['serial_port'])
+		    self.proxy.pin_mode(pin=13, mode=1)
+		    logger.info('Connected to %s on port %s', self.proxy.properties.display_name,
+                        app_values['serial_port'])
+        except Exception, e:
+            logger.error('Could not connect to base-node-rpc on port %s: %s.',
+			     app_values['serial_port'], e)
         if get_app().protocol:
             pgc = get_service_instance(ProtocolGridController, env='microdrop')
             pgc.update_grid()
 
     def on_plugin_disable(self):
-	self.board = None
+        del self.proxy
+        self.proxy = None
         if get_app().protocol:
             pgc = get_service_instance(ProtocolGridController, env='microdrop')
             pgc.update_grid()
@@ -104,12 +105,27 @@ class TestPlugin(Plugin, AppDataController, StepOptionsController):
 
     def on_step_options_changed(self, plugin, step_number):
         app = get_app()
-        if ((plugin == 'wheelerlab.test_plugin') and
-            (app.running or app.realtime_mode)):
+        if (plugin == 'wheelerlab.test_plugin'):
             options = self.get_step_options()
             logger.info('[TestPlugin] on_step_options_changed():'
                         '%s step #%d -> %s' % (plugin, step_number, options))
-            self.board.digital_write(pin=13, value=options['led_on'])
 
+    def on_step_run(self):
+        """
+        Handler called whenever a step is executed.
+
+        Plugins that handle this signal must emit the on_step_complete
+        signal once they have completed the step. The protocol controller
+        will wait until all plugins have completed the current step before
+        proceeding.
+        """
+        logger.debug('[TestPlugin] on_step_run()')
+        app = get_app()
+
+        if (self.proxy and app.realtime_mode or app.running):
+            options = self.get_step_options()
+            self.proxy.digital_write(pin=13, value=options['led_on'])
+        
+        emit_signal('on_step_complete', [self.name, None])
 
 PluginGlobals.pop_env()
