@@ -1,6 +1,6 @@
-from logger import logger
+from microdrop.logger import logger
 
-from plugin_helpers import path
+from microdrop.plugin_helpers import path
 from flatland import Element, Dict, String, Integer, Boolean, Float, Form, Enum
 
 from microdrop.plugin_manager import IPlugin, IWaveformGenerator, Plugin, \
